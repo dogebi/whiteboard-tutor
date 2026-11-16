@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Whiteboard Tutor — What do you want to understand?</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gochi+Hand&family=Patrick+Hand&family=Caveat:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{ color-scheme: light; }
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  margin:0; background:#d6d0c2; overflow:hidden;
+  font-family:'Patrick Hand', cursive;
+  display:flex; align-items:center; justify-content:center;
+}
+#stage{ position:relative; width:min(97vw, 150vh); aspect-ratio:16/9.55; }
+
+/* ---------- board ---------- */
+#board{
+  position:absolute; left:0; right:0; top:0; bottom:4.2%;
+  background:linear-gradient(155deg,#ffffff 0%,#fafaf8 45%,#f2f0ec 100%);
+  border-radius:22px;
+  box-shadow:
+    0 24px 60px rgba(55,50,40,.38),
+    0 4px 12px rgba(55,50,40,.22),
+    inset 0 0 0 2px rgba(158,152,138,.55),
+    inset 0 0 70px rgba(140,134,118,.13);
+}
+/* subtle glare */
+#board::after{
+  content:""; position:absolute; inset:0; border-radius:22px; pointer-events:none;
+  background:linear-gradient(115deg, rgba(255,255,255,.55) 0%, rgba(255,255,255,0) 28%);
+}
+/* ---------- tray ---------- */
+#tray{
+  position:absolute; left:9%; right:9%; bottom:.4%; height:3.4%;
+  background:linear-gradient(#ffffff,#e6e3dc);
+  border-radius:5px;
+  box-shadow:0 6px 14px rgba(50,45,35,.3), inset 0 1px 0 #fff;
+}
+#eraser{
+  position:absolute; left:8%; top:-55%; width:9%; height:150%;
+  background:linear-gradient(#4a4845,#2e2c2a); border-radius:4px;
+  box-shadow:0 3px 6px rgba(0,0,0,.35);
+}
+#eraser::after{ content:""; position:absolute; left:0; right:0; bottom:0; height:38%;
+  background:linear-gradient(#efefec,#d8d8d3); border-radius:0 0 4px 4px; }
+.marker{ position:absolute; bottom:38%; width:1.35%; height:135%; border-radius:3px;
+  box-shadow:0 2px 4px rgba(0,0,0,.28); }
+.marker::before{ content:""; position:absolute; left:0; right:0; top:0; height:26%;
+  background:inherit; filter:brightness(1.25); border-radius:3px 3px 1px 1px; }
+
+/* ---------- scene ---------- */
+#scene{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+
+/* ---------- landing ---------- */
+#landing{
+  position:absolute; inset:0; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:2.2%;
+  padding-bottom:6%;
+}
+#landing h1{
+  margin:0; font-family:'Gochi Hand', cursive; font-weight:400;
+  color:#33312d; letter-spacing:.01em;
+  font-size:clamp(26px, 4.5vw, 56px);
+}
+.ask{ display:flex; align-items:flex-end; gap:16px; }
+#qwrap{ position:relative; }
+#q{
+  font-family:'Patrick Hand', cursive; color:#33312d;
+  background:transparent; border:none; outline:none;
+  width:min(46vw, 520px); padding:4px 2px 6px;
+  font-size:clamp(16px, 2.15vw, 27px);
+  caret-color:#33312d;
+}
+#q::placeholder{ color:#b6b0a4; }
+#qwrap .uline{
+  position:absolute; left:-1%; right:-1%; bottom:-2px; height:8px; pointer-events:none;
+}
+#teachBtn{
+  font-family:'Gochi Hand', cursive; color:#fff; cursor:pointer;
+  background:#217a3c; border:none; border-radius:8px;
+  font-size:clamp(14px, 1.6vw, 20px); padding:.45em 1.1em .5em;
+  box-shadow:0 2px 5px rgba(20,80,40,.35);
+  transition:transform .12s ease, background .15s ease;
+}
+#teachBtn:hover{ background:#1c6a33; transform:translateY(-1px); }
+#teachBtn:active{ transform:translateY(0); }
+.tries{ font-size:clamp(12px, 1.25vw, 16px); color:#a29c90; }
+.tries a{ color:#7d776b; text-decoration:none; border-bottom:1.5px dotted #a29c90;
+  cursor:pointer; margin:0 .5em; }
+.tries a:hover{ color:#33312d; border-bottom-color:#33312d; }
+#penIllo{ position:absolute; width:7%; pointer-events:none; }
+
+/* ---------- controls ---------- */
+#ctl{ position:absolute; top:14px; right:16px; display:flex; gap:7px; z-index:5; }
+#ctl button{
+  width:32px; height:32px; border-radius:50%;
+  background:rgba(255,255,255,.75); border:1px solid #c9c4b8; color:#5a554b;
+  font-size:14px; line-height:1; cursor:pointer;
+}
+#ctl button:hover{ background:#fff; color:#33312d; }
+#ctl button:focus-visible{ outline:2px solid #217a3c; outline-offset:2px; }
+
+/* ---------- settings modal ---------- */
+#modal{ position:fixed; inset:0; background:rgba(40,36,28,.45); display:none;
+  align-items:center; justify-content:center; z-index:50; }
+#modal.open{ display:flex; }
+#modal .card{
+  background:#fdfcf9; border-radius:14px; padding:26px 30px; width:min(92vw,440px);
+  box-shadow:0 24px 60px rgba(0,0,0,.35); font-size:15px; color:#33312d;
+}
+#modal h2{ margin:0 0 4px; font-family:'Gochi Hand',cursive; font-weight:400; font-size:24px; }
+#modal .hint{ color:#8b8578; font-size:13px; margin:0 0 14px; }
+#modal label{ display:block; margin:10px 0 3px; color:#6e685c; font-size:13.5px; }
+#modal input,#modal select{
+  width:100%; padding:7px 9px; border:1.5px solid #d3cec2; border-radius:7px;
+  font-family:'Patrick Hand',cursive; font-size:14.5px; background:#fff; color:#33312d;
+}
+#modal input:focus,#modal select:focus{ outline:none; border-color:#217a3c; }
+#modal .row{ display:flex; gap:10px; margin-top:18px; }
+#modal .row button{
+  flex:1; padding:9px 0; border-radius:8px; border:1.5px solid #c9c4b8;
+  background:#fff; color:#5a554b; font-family:'Patrick Hand',cursive; font-size:15px; cursor:pointer;
+}
+#modal .row button.primary{ background:#217a3c; border-color:#217a3c; color:#fff; }
+#cfgMsg{ margin-top:10px; font-size:13px; color:#a25; min-height:1.2em; }
+
+#toast{
+  position:fixed; left:50%; bottom:26px; transform:translateX(-50%);
+  background:#33312d; color:#fff; padding:8px 16px; border-radius:8px;
+  font-size:14px; opacity:0; transition:opacity .3s; pointer-events:none; z-index:60;
+}
+#toast.show{ opacity:.92; }
+@media (prefers-reduced-motion: reduce){ /* engine will run near-instantly */ }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="board">
+    <svg id="scene" viewBox="0 0 1200 640" preserveAspectRatio="xMidYMid meet" aria-label="whiteboard"></svg>
+
+    <div id="landing">
+      <h1>What do you want to understand?</h1>
+      <div class="ask">
+        <div id="qwrap">
+          <input id="q" autocomplete="off" spellcheck="false" placeholder="ask anything…">
+          <svg class="uline" viewBox="0 0 520 8" preserveAspectRatio="none"><path d="M2 5 Q 90 2.5 180 4.4 T 360 4.2 T 518 4.6" fill="none" stroke="#33312d" stroke-width="2.6" stroke-linecap="round"/></svg>
+        </div>
+        <button id="teachBtn">Teach me →</button>
+        <svg id="penIllo" viewBox="0 0 100 100" style="right:2%; bottom:34%;">
+          <g transform="rotate(38 50 50)">
+            <rect x="30" y="44" width="52" height="11" rx="4" fill="#2e2c2a"/>
+            <rect x="70" y="44" width="10" height="11" rx="2" fill="#f2f0ec" stroke="#2e2c2a" stroke-width="1.5"/>
+            <path d="M30 45 L18 49.5 L30 54 Z" fill="#e8e6e0" stroke="#2e2c2a" stroke-width="1.5"/>
+            <path d="M18 49.5 L13 49.7 L18 51.6 Z" fill="#2e2c2a"/>
+          </g>
+        </svg>
+      </div>
+      <div class="tries">or try
+        <a data-q="Why is the sky blue?">Why is the sky blue?</a>
+        <a data-q="How do vaccines work?">How do vaccines work?</a>
+        <a data-q="What is a derivative?">What is a derivative?</a>
+      </div>
+    </div>
+
+    <div id="ctl" hidden>
+      <button id="bPause" title="일시정지/재생">⏸</button>
+      <button id="bSkip" title="다음 단계">⏭</button>
+      <button id="bReplay" title="다시 보기">↺</button>
+      <button id="bNew" title="새 질문">✎</button>
+      <button id="bCfg" title="AI 설정">⚙</button>
+    </div>
+
+    <div id="trayWrap">
+      <div id="tray">
+        <div id="eraser"></div>
+        <div class="marker" style="left:60%; background:#33312d;"></div>
+        <div class="marker" style="left:64%; background:#3f62c9;"></div>
+        <div class="marker" style="left:68%; background:#3f62c9;"></div>
+        <div class="marker" style="left:72%; background:#cf4a3f;"></div>
+        <div class="marker" style="left:76%; background:#3d9c54;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="modal">
+  <div class="card">
+    <h2>AI 설정</h2>
+    <p class="hint">API 키를 넣으면 <b>어떤 질문이든</b> 실시간으로 화이트보드 강의를 만듭니다. 키가 없으면 내장된 데모 레슨이 재생됩니다. 키는 이 브라우저에만 저장됩니다.</p>
+    <label>제공사</label>
+    <select id="cProvider">
+      <option value="openai">OpenAI 호환 API (OpenAI / vLLM / 기타)</option>
+      <option value="anthropic">Anthropic (Claude / bigmodel / z.ai)</option>
+      <option value="deepseek">DeepSeek</option>
+    </select>
+    <label>Base URL</label>
+    <input id="cBase" placeholder="https://api.openai.com/v1">
+    <label>모델</label>
+    <input id="cModel" placeholder="gpt-4o-mini">
+    <label>API Key</label>
+    <input id="cKey" type="password" placeholder="sk-…">
+    <div id="cfgMsg"></div>
+    <div class="row">
+      <button id="cCancel">닫기</button>
+      <button id="cSave" class="primary">저장</button>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+const NS = "http://www.w3.org/2000/svg";
+const scene = document.getElementById("scene");
+const landing = document.getElementById("landing");
+const qInput = document.getElementById("q");
+const ctl = document.getElementById("ctl");
+const toastEl = document.getElementById("toast");
+
+const COLORS = {
+  dark:"#33312d", red:"#cf4a3f", blue:"#3f62c9", green:"#3d9c54",
+  gray:"#98917f", black:"#2e2c2a", white:"#ffffff", ground:"#4a4740"
+};
+const FILLS = { pink:"rgba(224,124,112,.30)", blue:"rgba(110,140,220,.22)", green:"rgba(110,190,130,.22)" };
+
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+let SPEED = reduced ? 20 : 1;          // playback speed multiplier
+let runId = 0, paused = false, skipFlag = false, teaching = false, currentLesson = null;
+let lastQuery = "", generating = false;
+
+/* ---------- timing helpers (pause / skip aware) ---------- */
+function wait(ms, id){
+  return new Promise(res=>{
+    let left = ms / SPEED, last = performance.now();
+    (function f(now){
+      if(id !== runId || skipFlag) return res();
+      if(!paused){ left -= now - last; }
+      last = now;
+      if(left <= 0) res(); else requestAnimationFrame(f);
+    })(performance.now());
+  });
+}
+function typeText(node, str, cps, id){
+  return new Promise(res=>{
+    let i = 0;
+    (async function step(){
+      for(i = 1; i <= str.length; i++){
+        if(id !== runId || skipFlag) break;
+        node.textContent = str.slice(0, i);
+        await wait(1000 / cps, id);
+      }
+      node.textContent = str;
+      res();
+    })();
+  });
+}
+function drawStroke(node, dur, id, dashed){
+  return new Promise(res=>{
+    let len = 300;
+    try{ len = node.getTotalLength(); }catch(e){}
+    if(dashed){ node.style.opacity = 0; }
+    else{
+      node.style.strokeDasharray = len + " " + len;
+      node.style.strokeDashoffset = len;
+    }
+    dur = Math.max(120, (dur || Math.min(1600, Math.max(300, len * 3.2))) / SPEED);
+    let p = 0, last = performance.now();
+    (function f(now){
+      if(id !== runId){ return res(); }
+      if(!paused){ p += (now - last) / dur; last = now; } else { last = now; }
+      if(skipFlag) p = 1;
+      if(dashed){ node.style.opacity = Math.min(1, p * 1.6); }
+      else{ node.style.strokeDashoffset = len * (1 - Math.min(1, p)); }
+      if(p >= 1) res(); else requestAnimationFrame(f);
+    })(performance.now());
+  });
+}
+function fadeFill(node, target, id){
+  return new Promise(res=>{
+    let p = 0, last = performance.now(); const dur = 500 / SPEED;
+    (function f(now){
+      if(id !== runId) return res();
+      if(!paused){ p += (now - last) / dur; last = now; } else { last = now; }
+      if(skipFlag) p = 1;
+      node.setAttribute("fill-opacity", (target * Math.min(1, p)).toFixed(3));
+      if(p >= 1) res(); else requestAnimationFrame(f);
+    })(performance.now());
+  });
+}
+
+/* ---------- svg element builders ---------- */
+function mk(tag, attrs, parent){
+  const n = document.createElementNS(NS, tag);
+  for(const k in attrs) n.setAttribute(k, attrs[k]);
+  (parent || scene).appendChild(n);
+  return n;
+}
+let markerCache = {};
+function ensureDefs(){
+  let defs = scene.querySelector("defs");
+  if(!defs){ defs = mk("defs", {}); markerCache = {}; }
+  return defs;
+}
+function arrowMarker(color){
+  const defs = ensureDefs();
+  if(markerCache[color]) return markerCache[color];
+  const id = "arw" + color.replace(/[^a-z0-9]/gi, "");
+  const m = mk("marker", { id, viewBox:"0 0 10 10", refX:"8.5", refY:"5",
+    markerWidth:"6.5", markerHeight:"6.5", orient:"auto-start-reverse" }, defs);
+  mk("path", { d:"M0 0 L10 5 L0 10 z", fill:color }, m);
+  markerCache[color] = "url(#" + id + ")";
+  return markerCache[color];
+}
+function makeText(e){
+  const t = mk("text", { x:e.x, y:e.y,
+    "font-size": e.s || 26, fill: COLORS[e.c || "dark"] || e.c,
+    "font-family": e.f === "p" ? "'Patrick Hand',cursive" : "'Gochi Hand',cursive" });
+  if(e.a) t.setAttribute("text-anchor", e.a);
+  return t;
+}
+function makeStroke(e){
+  const color = COLORS[e.c || "dark"] || e.c;
+  const attrs = { fill:"none", stroke:color, "stroke-width": e.w || 2.6,
+    "stroke-linecap":"round", "stroke-linejoin":"round" };
+  if(e.dash) attrs["stroke-dasharray"] = (e.w || 2.6) * 3 + " " + (e.w || 2.6) * 3.2;
+  if(e.arrow) attrs["marker-end"] = arrowMarker(color);
+  let node;
+  if(e.shape === "ellipse"){
+    node = mk("ellipse", { cx:e.cx, cy:e.cy, rx:e.rx, ry:e.ry, ...attrs });
+    if(e.rot) node.setAttribute("transform", "rotate(" + e.rot + " " + e.cx + " " + e.cy + ")");
+  }else if(e.shape === "circle"){
+    node = mk("circle", { cx:e.cx, cy:e.cy, r:e.r, ...attrs });
+  }else if(e.shape === "line"){
+    node = mk("line", { x1:e.x1, y1:e.y1, x2:e.x2, y2:e.y2, ...attrs });
+  }else{
+    node = mk("path", { d:e.d, ...attrs });
+  }
+  let fillNode = null, fillAlpha = 0;
+  if(e.fill && FILLS[e.fill]){
+    const fd = { ...(e.d ? { d:e.d } : {}),
+      cx:e.cx, cy:e.cy, rx:e.rx, ry:e.ry, r:e.r };
+    fillNode = e.shape === "ellipse" ? mk("ellipse", { cx:e.cx,cy:e.cy,rx:e.rx,ry:e.ry, fill:FILLS[e.fill], "fill-opacity":0, stroke:"none" })
+      : e.shape === "circle" ? mk("circle", { cx:e.cx,cy:e.cy,r:e.r, fill:FILLS[e.fill], "fill-opacity":0, stroke:"none" })
+      : mk("path", { d:e.d, fill:FILLS[e.fill], "fill-opacity":0, stroke:"none" });
+    fillAlpha = 1;
+    node.parentNode.insertBefore(fillNode, node);
+  }
+  return { node, fillNode, fillAlpha };
+}
+function strikeThrough(textNode, color){
+  const b = textNode.getBBox();
+  const s = mk("line", { x1:b.x - 4, y1:b.y + b.height * .58, x2:b.x + b.width + 6, y2:b.y + b.height * .48,
+    stroke: COLORS.red, "stroke-width":2.8, "stroke-linecap":"round" });
+  return drawStroke(s, 400, runId, false);
+}
+function boxAround(textNode, style, color){
+  const b = textNode.getBBox(), pad = 7;
+  let node, dashed = false;
+  if(style === "underline"){
+    const y = b.y + b.height + 3;
+    let d = "M " + (b.x - 2) + " " + y;
+    const seg = Math.max(24, b.width / 6);
+    for(let x = b.x - 2 + seg; x < b.x + b.width + 2; x += seg)
+      d += " q " + seg * .45 + " 4.5 " + seg + " 1.2";
+    node = mk("path", { d, fill:"none", stroke:COLORS[color] || COLORS.dark, "stroke-width":2.4, "stroke-linecap":"round" });
+  }else{
+    node = mk("ellipse", { cx:b.x + b.width / 2, cy:b.y + b.height / 2 + 1,
+      rx:b.width / 2 + pad, ry:b.height / 2 + pad - 1,
+      fill:"none", stroke:COLORS[color] || COLORS.green, "stroke-width":2.3 });
+    if(style === "circle") node.setAttribute("transform",
+      "rotate(-6 " + (b.x + b.width / 2) + " " + (b.y + b.height / 2) + ")");
+  }
+  return drawStroke(node, 550, runId, dashed);
+}
+
+/* ---------- step player ---------- */
+async function playStep(step, id){
+  for(const e of (step.els || [])){
+    if(id !== runId) return;
+    if(e.k === "t"){
+      const t = makeText(e);
+      await typeText(t, e.t, e.cps || 40, id);
+      if(id === runId){
+        if(e.strike) await strikeThrough(t, e.c);
+        if(e.box) await boxAround(t, e.box, e.bc);
+      }
+    }else if(e.k === "s"){
+      const { node, fillNode, fillAlpha } = makeStroke(e);
+      await drawStroke(node, e.dur, id, e.dash);
+      if(fillNode && id === runId) await fadeFill(fillNode, fillAlpha, id);
+    }
+    await wait(e.after != null ? e.after : 150, id);
+  }
+}
+async function playLesson(lesson){
+  runId++; const id = runId;
+  paused = false; skipFlag = false; teaching = true; currentLesson = lesson;
+  scene.innerHTML = ""; ensureDefs();
+  landing.style.display = "none";
+  ctl.hidden = false;
+  setPauseIcon();
+  for(const step of lesson.steps){
+    if(id !== runId) return;
+    await playStep(step, id);
+    skipFlag = false;
+    await wait(420, id);
+  }
+  if(id === runId) showDone();
+}
+function showDone(){
+  const id = runId;
+  const t = mk("text", { x:600, y:608, "font-size":20, fill:"#a29c90",
+    "font-family":"'Patrick Hand',cursive", "text-anchor":"middle" });
+  (async()=>{
+    await typeText(t, "✎  더 궁금한 게 있으면 위의 ✎ 버튼을 눌러 새 질문을 하세요", 30, id);
+  })();
+}
+function clearScene(){ runId++; scene.innerHTML = ""; ensureDefs(); teaching = false; ctl.hidden = true; }
+
+/* ---------- controls ---------- */
+const bPause = document.getElementById("bPause");
+function setPauseIcon(){ bPause.textContent = paused ? "▶" : "⏸"; }
+bPause.onclick = ()=>{ paused = !paused; setPauseIcon(); };
+document.getElementById("bSkip").onclick = ()=>{ skipFlag = true; };
+document.getElementById("bReplay").onclick = ()=>{
+  if(generating) return;
+  if(currentLesson){ playLesson(currentLesson); }
+  else if(lastQuery){ teach(lastQuery); }   // API 생성 실패/중이었던 경우 → 다시 요청
+  else toast("다시 볼 레슨이 아직 없어요 — 먼저 질문해주세요");
+};
+document.getElementById("bNew").onclick = ()=>{ clearScene(); landing.style.display = "flex"; qInput.focus(); };
+document.getElementById("bCfg").onclick = openModal;
+
+/* ---------- toast ---------- */
+let toastT;
+function toast(msg){
+  toastEl.textContent = msg; toastEl.classList.add("show");
+  clearTimeout(toastT); toastT = setTimeout(()=>toastEl.classList.remove("show"), 3200);
+}
+
+/* ---------- demo matching ---------- */
+function pickDemo(q){
+  const s = q.toLowerCase();
+  if(/season|계절|4계절|사계절/.test(s)) return LESSONS.seasons;
+  if(/sky|하늘|파란|blue/.test(s)) return LESSONS.sky;
+  if(/vaccine|백신|면역/.test(s)) return LESSONS.vaccine;
+  if(/derivative|미분|도함수|slope|기울기/.test(s)) return LESSONS.derivative;
+  return null;
+}
+
+/* ---------- teach entry ---------- */
+async function teach(q){
+  if(!q.trim() || generating) return;
+  lastQuery = q;
+  const demo = pickDemo(q);
+  if(demo){ playLesson(demo); return; }
+  // no demo → try API
+  const cfg = getCfg();
+  if(!cfg.key){
+    drawNote("이 질문엔 준비된 데모가 없어요 ⚙ 에서 API 키를 넣으면\n어떤 질문이든 실시간으로 설명해드릴 수 있어요!");
+    return;
+  }
+  generating = true;
+  const note = drawNote("화이트보드에 그리는 중… (생각 + 스케치)");
+  try{
+    const lesson = await generateLesson(q, cfg);
+    generating = false;
+    note.remove();
+    if(lesson && lesson.steps && lesson.steps.length){ playLesson(lesson); }
+    else throw new Error("응답을 레슨으로 변환하지 못했어요");
+  }catch(err){
+    generating = false;
+    note.remove();
+    drawNote("API 오류: " + (err.message || err) + "\n↺ 버튼으로 다시 시도할 수 있어요.");
+  }
+}
+function drawNote(msg){
+  scene.innerHTML = ""; ensureDefs();
+  landing.style.display = "none"; ctl.hidden = false;
+  const lines = msg.split("\n");
+  const id = ++runId;
+  lines.forEach((ln, i)=>{
+    const t = mk("text", { x:600, y:280 + i * 44, "font-size":30, fill:"#6e685c",
+      "font-family":"'Gochi Hand',cursive", "text-anchor":"middle" });
+    typeText(t, ln, 35, id);
+  });
+  return { remove(){ clearScene(); } };
+}
+
+/* ---------- LLM lesson generation ---------- */
+const SCHEMA_PROMPT = `You are a whiteboard tutor that explains topics with hand-drawn animations.
+Return ONLY a JSON object (no markdown fences) shaped like:
+{"steps":[{"els":[
+  {"k":"t","x":0,"y":0,"t":"text","s":30,"c":"dark","f":"g"},
+  {"k":"s","d":"M 100 100 L 300 120","c":"blue","w":2.6,"arrow":true,"fill":"pink","dash":false}
+]}]}
+
+Rules:
+- Canvas is 1200 wide x 640 tall; keep everything inside (x:40-1160, y:50-620).
+- c is one of: dark, red, blue, green, gray. f "g" = handwriting, "p" = plain hand.
+- Step 1 is a big title (s 48-56) at y ~95 plus an underline stroke.
+- Then 4-9 more steps teaching step by step, in the SAME LANGUAGE as the user's question.
+- Keep each text under ~60 chars; use multiple text lines instead of long sentences.
+- Use "s" strokes for simple diagrams (arrows, circles via path arcs, axes, waves).
+- Text colors: key terms can be red/blue/green; conclusions green.
+- Educational, warm, concise. Final step: a short green takeaway.`;
+
+async function generateLesson(q, cfg){
+  let content;
+  if(cfg.provider === "anthropic"){
+    const r = await fetch(cfg.base.replace(/\/$/, "") + "/v1/messages", {
+      method:"POST",
+      headers:{ "content-type":"application/json",
+        "x-api-key":cfg.key, "anthropic-version":"2023-06-01",
+        "anthropic-dangerous-direct-browser-access":"true" },
+      body:JSON.stringify({ model:cfg.model, max_tokens:8000,
+        messages:[{ role:"user", content:SCHEMA_PROMPT + "\n\nQuestion: " + q }] })
+    });
+    if(!r.ok) throw new Error((await r.text()).slice(0, 180));
+    const j = await r.json();
+    // GLM 등은 첫 블록이 thinking 블록일 수 있음 → text 블록만 수집
+    content = (j.content || []).filter(b => b.type === "text").map(b => b.text || "").join("");
+    if(!content && j.error) throw new Error(JSON.stringify(j.error).slice(0, 180));
+    if(!content) throw new Error("응답 구조 예상 외: " + JSON.stringify(j).slice(0, 200));
+  }else{
+    const r = await fetch(cfg.base.replace(/\/$/, "") + "/chat/completions", {
+      method:"POST",
+      headers:{ "content-type":"application/json", "Authorization":"Bearer " + cfg.key },
+      body:JSON.stringify({ model:cfg.model, temperature:0.6,
+        messages:[{ role:"system", content:SCHEMA_PROMPT },
+                  { role:"user", content:q }] })
+    });
+    if(!r.ok) throw new Error((await r.text()).slice(0, 180));
+    const j = await r.json();
+    content = j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+  }
+  if(!content) throw new Error("빈 응답");
+  content = content.replace(/```json|```/g, "").trim();
+  const start = content.indexOf("{");
+  const lesson = JSON.parse(content.slice(start, content.lastIndexOf("}") + 1));
+  if(!Array.isArray(lesson.steps)) throw new Error("steps 배열 없음");
+  return lesson;
+}
+
+/* ---------- settings ---------- */
+const modal = document.getElementById("modal");
+function getCfg(){
+  let saved = {};
+  try{ saved = JSON.parse(localStorage.getItem("wbt-cfg") || "{}"); }catch(e){}
+  const prov = document.getElementById("cProvider").value || saved.provider || "openai";
+  const defBase = { openai:"https://api.openai.com/v1", anthropic:"https://api.anthropic.com", deepseek:"https://api.deepseek.com" }[prov];
+  const defModel = { openai:"gpt-4o-mini", anthropic:"claude-sonnet-4-5", deepseek:"deepseek-chat" }[prov];
+  return {
+    provider: prov,
+    base: document.getElementById("cBase").value.trim() || saved.base || defBase,
+    model: document.getElementById("cModel").value.trim() || saved.model || defModel,
+    key: document.getElementById("cKey").value.trim() || saved.key || ""
+  };
+}
+function openModal(){
+  let saved = {};
+  try{ saved = JSON.parse(localStorage.getItem("wbt-cfg") || "{}"); }catch(e){}
+  document.getElementById("cProvider").value = saved.provider || "openai";
+  document.getElementById("cBase").value = saved.base || "";
+  document.getElementById("cModel").value = saved.model || "";
+  document.getElementById("cKey").value = saved.key || "";
+  document.getElementById("cfgMsg").textContent = "";
+  modal.classList.add("open");
+}
+document.getElementById("cCancel").onclick = ()=>modal.classList.remove("open");
+document.getElementById("cSave").onclick = ()=>{
+  const cfg = getCfg();
+  try{ localStorage.setItem("wbt-cfg", JSON.stringify(cfg)); }catch(e){}
+  modal.classList.remove("open");
+  toast(cfg.key ? "AI 설정 저장 완료 — 이제 어떤 질문이든 시도해보세요!" : "키 없이 저장됨 — 데모 레슨만 동작합니다");
+};
+document.getElementById("cProvider").addEventListener("change", e=>{
+  const p = e.target.value;
+  const bases = { openai:"https://api.openai.com/v1", anthropic:"https://api.anthropic.com", deepseek:"https://api.deepseek.com" };
+  const models = { openai:"gpt-4o-mini", anthropic:"claude-sonnet-4-5", deepseek:"deepseek-chat" };
+  document.getElementById("cBase").placeholder = bases[p];
+  document.getElementById("cModel").placeholder = models[p];
+});
+
+/* ---------- landing wiring ---------- */
+document.getElementById("teachBtn").onclick = ()=>{ teach(qInput.value); qInput.value = ""; };
+qInput.addEventListener("keydown", e=>{
+  if(e.key === "Enter"){ teach(qInput.value); qInput.value = ""; }
+});
+document.querySelectorAll(".tries a").forEach(a=>{
+  a.addEventListener("click", ()=>teach(a.dataset.q));
+});
+qInput.focus();
+
+/* ================= DEMO LESSONS ================= */
+function gnum(x, y, n){
+  return [
+    { k:"s", shape:"circle", cx:x, cy:y, r:13, c:"green", w:2.2, dur:280, after:20 },
+    { k:"t", x:x, y:y+5, t:String(n), s:16, c:"green", a:"middle", cps:60, after:60 }
+  ];
+}
+const TICKS = [[614,269],[614,201],[734,148],[916,137],[1079,171],[1126,269],[1006,322],[824,333]]
+  .map(([x,y])=>"M "+(x-6)+" "+y+" A 6 6 0 1 0 "+(x+6)+" "+y+" A 6 6 0 1 0 "+(x-6)+" "+y+
+              " M "+(x-6)+" "+(y+5)+" L "+(x+6)+" "+(y-5)).join(" ");
+const SUNRAYS = "M902 222 L916 222 M892.6 244.6 L902.5 254.5 M870 254 L870 268 M847.4 244.6 L837.5 254.5 M838 222 L824 222 M847.4 199.4 L837.5 189.5 M870 190 L870 176 M892.6 199.4 L902.5 189.5";
+
+const LESSONS = {
+
+/* ---------- Why do we have seasons? ---------- */
+seasons: { steps: [
+  { els:[
+    { k:"t", x:60, y:95, t:"Why do we have seasons?", s:54, c:"dark", cps:26 },
+    { k:"s", d:"M 55 112 Q 200 104 340 110 T 610 104", c:"dark", w:3, dur:500 }
+  ]},
+  { els:[
+    { k:"t", x:60, y:178, t:"Summer = closer to the Sun?", s:32, c:"red", cps:30, strike:true, after:350 }
+  ]},
+  { els:[
+    ...gnum(68, 237, 1),
+    { k:"t", x:100, y:248, t:"closest", s:28, c:"dark", cps:34, after:100 },
+    { k:"t", x:202, y:248, t:"Jan 3", s:26, c:"dark", cps:34, box:"circle", bc:"green", after:120 },
+    { k:"t", x:272, y:248, t:"~147 million km", s:23, c:"dark", cps:40 },
+    { k:"t", x:100, y:296, t:"farthest", s:28, c:"dark", cps:34, after:100 },
+    { k:"t", x:226, y:296, t:"Jul 4", s:26, c:"dark", cps:34, after:100 },
+    { k:"t", x:282, y:296, t:"~152 million km", s:23, c:"dark", cps:40 }
+  ]},
+  { els:[
+    { k:"s", shape:"ellipse", cx:870, cy:235, rx:272, ry:100, rot:-6, c:"gray", w:2, dur:1100, after:100 },
+    { k:"s", d:TICKS, c:"gray", w:1.8, dur:900 }
+  ]},
+  { els:[
+    { k:"s", shape:"circle", cx:870, cy:222, r:24, c:"red", w:2.6, dur:450 },
+    { k:"s", d:SUNRAYS, c:"red", w:2.4, dur:600, after:60 },
+    { k:"t", x:870, y:228, t:"Sun", s:17, c:"red", a:"middle", cps:60 }
+  ]},
+  { els:[
+    { k:"s", shape:"circle", cx:598, cy:232, r:22, c:"blue", w:2.4, dur:400 },
+    { k:"s", x1:586, y1:206, x2:608, y2:260, shape:"line", c:"dark", w:2, dur:260 },
+    { k:"t", x:580, y:202, t:"N", s:15, c:"dark", cps:60, after:40 },
+    { k:"s", x1:598, y1:196, x2:598, y2:272, shape:"line", c:"gray", w:1.8, dash:true, dur:350 },
+    { k:"t", x:552, y:206, t:"Earth", s:20, c:"blue", a:"end", cps:40, after:150 },
+    { k:"s", shape:"circle", cx:1096, cy:238, r:22, c:"blue", w:2.4, dur:400 },
+    { k:"s", x1:1084, y1:212, x2:1106, y2:266, shape:"line", c:"dark", w:2, dur:260 },
+    { k:"t", x:1078, y:208, t:"N", s:15, c:"dark", cps:60, after:40 },
+    { k:"s", x1:1096, y1:202, x2:1096, y2:278, shape:"line", c:"gray", w:1.8, dash:true, dur:350 }
+  ]},
+  { els:[
+    { k:"s", x1:840, y1:228, x2:634, y2:230, shape:"line", c:"red", w:2.4, arrow:true, dur:500, after:150 },
+    { k:"s", x1:900, y1:232, x2:1068, y2:236, shape:"line", c:"red", w:2.4, arrow:true, dur:500, after:150 },
+    ...gnum(552, 150, 2),
+    ...gnum(756, 186, 3)
+  ]},
+  { els:[
+    { k:"t", x:566, y:330, t:"June", s:24, c:"dark", a:"middle", cps:40, after:80 },
+    { k:"t", x:566, y:356, t:"north leans toward", s:19, c:"dark", a:"middle", cps:50 },
+    { k:"t", x:1082, y:330, t:"December", s:24, c:"dark", a:"middle", cps:40, after:80 },
+    { k:"t", x:1082, y:356, t:"north leans away", s:19, c:"dark", a:"middle", cps:50 },
+    { k:"t", x:532, y:292, t:"~23.5°", s:19, c:"gray", cps:40 }
+  ]},
+  { els:[
+    ...gnum(530, 388, 4),
+    { k:"s", d:"M 578 400 L 622 400 L 640 516 L 596 516 Z", c:"red", w:2.2, fill:"pink", dur:600 },
+    { k:"s", x1:584, y1:404, x2:602, y2:512, shape:"line", c:"red", w:2.2, arrow:true, dur:260, after:30 },
+    { k:"s", x1:592, y1:404, x2:610, y2:512, shape:"line", c:"red", w:2.2, arrow:true, dur:260, after:30 },
+    { k:"s", x1:600, y1:404, x2:618, y2:512, shape:"line", c:"red", w:2.2, arrow:true, dur:260, after:30 },
+    { k:"s", x1:608, y1:404, x2:626, y2:512, shape:"line", c:"red", w:2.2, arrow:true, dur:260, after:30 },
+    { k:"s", x1:616, y1:404, x2:634, y2:512, shape:"line", c:"red", w:2.2, arrow:true, dur:260 },
+    { k:"s", x1:574, y1:392, x2:626, y2:392, shape:"line", c:"dark", w:2, dur:220 },
+    { k:"t", x:586, y:382, t:"1 m", s:18, c:"dark", cps:50, after:100 },
+    { k:"s", d:"M 594 496 A 24 24 0 0 0 572 518", c:"dark", w:2, dur:220 },
+    { k:"t", x:548, y:514, t:"77°", s:20, c:"dark", a:"middle", cps:50 },
+    { k:"s", x1:516, y1:520, x2:706, y2:520, shape:"line", c:"ground", w:3, dur:350 },
+    { k:"s", x1:606, y1:527, x2:690, y2:527, shape:"line", c:"red", w:7, dur:300, after:100 },
+    { k:"t", x:648, y:558, t:"1.0 m", s:20, c:"dark", a:"middle", cps:50 },
+    { k:"t", x:648, y:592, t:"summer: high Sun", s:23, c:"dark", a:"middle", cps:36 }
+  ]},
+  { els:[
+    { k:"s", d:"M 840 434 L 878 434 L 1032 516 L 994 516 Z", c:"red", w:2.2, fill:"pink", dur:600 },
+    { k:"s", x1:846, y1:438, x2:992, y2:512, shape:"line", c:"red", w:2.2, arrow:true, dur:260, after:30 },
+    { k:"s", x1:854, y1:438, x2:1000, y2:512, shape:"line", c:"red", w:2.2, arrow:true, dur:260, after:30 },
+    { k:"s", x1:862, y1:438, x2:1008, y2:512, shape:"line", c:"red", w:2.2, arrow:true, dur:260, after:30 },
+    { k:"s", x1:870, y1:438, x2:1016, y2:512, shape:"line", c:"red", w:2.2, arrow:true, dur:260, after:30 },
+    { k:"s", x1:878, y1:438, x2:1024, y2:512, shape:"line", c:"red", w:2.2, arrow:true, dur:260 },
+    { k:"t", x:822, y:428, t:"1 m", s:18, c:"dark", cps:50, after:100 },
+    { k:"s", d:"M 962 516 A 30 30 0 0 1 975 498", c:"dark", w:2, dur:220 },
+    { k:"t", x:948, y:514, t:"30°", s:20, c:"dark", a:"middle", cps:50 },
+    { k:"s", x1:806, y1:520, x2:1150, y2:520, shape:"line", c:"ground", w:3, dur:400 },
+    { k:"s", x1:996, y1:527, x2:1092, y2:527, shape:"line", c:"red", w:7, dur:300, after:100 },
+    { k:"t", x:1044, y:558, t:"2.0 m", s:20, c:"dark", a:"middle", cps:50 },
+    { k:"s", x1:1102, y1:566, x2:1132, y2:546, shape:"line", c:"red", w:9, dur:200 },
+    { k:"s", x1:1096, y1:570, x2:1102, y2:566, shape:"line", c:"dark", w:5, dur:120 }
+  ]},
+  { els:[
+    { k:"t", x:64, y:432, t:"Seasons come from the 23.5° tilt —", s:24, c:"green", cps:32 },
+    { k:"t", x:64, y:466, t:"not from distance!", s:24, c:"green", cps:32, box:"underline", bc:"green", after:400 }
+  ]}
+]},
+
+/* ---------- Why is the sky blue? ---------- */
+sky: { steps: [
+  { els:[
+    { k:"t", x:60, y:95, t:"Why is the sky blue?", s:54, c:"dark", cps:26 },
+    { k:"s", d:"M 55 112 Q 180 104 320 110 T 580 106", c:"dark", w:3, dur:450 }
+  ]},
+  { els:[
+    { k:"t", x:60, y:185, t:"Sunlight looks white —", s:30, c:"dark", cps:32 },
+    { k:"t", x:60, y:227, t:"but it's really every color mixed.", s:30, c:"dark", cps:32 }
+  ]},
+  { els:[
+    { k:"s", d:"M 330 260 L 390 380 L 270 380 Z", c:"dark", w:2.6, dur:600 },
+    { k:"s", x1:170, y1:300, x2:322, y2:308, shape:"line", c:"#d9a53a", w:2.6, arrow:true, dur:450, after:150 },
+    { k:"s", x1:378, y1:336, x2:468, y2:330, shape:"line", c:"red", w:2.4, arrow:true, dur:300, after:60 },
+    { k:"t", x:484, y:336, t:"red", s:17, c:"red", cps:60 },
+    { k:"s", x1:376, y1:344, x2:464, y2:346, shape:"line", c:"#e07f3c", w:2.4, arrow:true, dur:300, after:60 },
+    { k:"s", x1:374, y1:352, x2:462, y2:362, shape:"line", c:"green", w:2.4, arrow:true, dur:300, after:60 },
+    { k:"s", x1:372, y1:360, x2:458, y2:380, shape:"line", c:"blue", w:2.4, arrow:true, dur:300, after:60 },
+    { k:"t", x:478, y:386, t:"blue", s:17, c:"blue", cps:60 }
+  ]},
+  { els:[
+    { k:"t", x:60, y:310, t:"Air scatters short wavelengths", s:28, c:"dark", cps:30 },
+    { k:"t", x:60, y:348, t:"(blue) far more than long (red).", s:28, c:"dark", cps:30, after:150 },
+    { k:"t", x:600, y:432, t:"red light: passes straight through", s:18, c:"red", cps:40 },
+    { k:"s", d:"M 600 460 q 30 -26 60 0 q 30 26 60 0 q 30 -26 60 0 q 30 26 60 0", c:"red", w:2.6, dur:700 },
+    { k:"t", x:600, y:496, t:"blue light: bounces everywhere", s:18, c:"blue", cps:40 },
+    { k:"s", d:"M 600 524 q 12 -20 24 0 q 12 20 24 0 q 12 -20 24 0 q 12 20 24 0 q 12 -20 24 0 q 12 20 24 0 q 12 -20 24 0 q 12 20 24 0", c:"blue", w:2.4, dur:800 }
+  ]},
+  { els:[
+    { k:"s", x1:660, y1:250, x2:720, y2:292, shape:"line", c:"blue", w:2.4, arrow:true, dur:260, after:60 },
+    { k:"s", x1:780, y1:240, x2:840, y2:284, shape:"line", c:"blue", w:2.4, arrow:true, dur:260, after:60 },
+    { k:"s", x1:900, y1:250, x2:950, y2:296, shape:"line", c:"blue", w:2.4, arrow:true, dur:260, after:200 },
+    { k:"t", x:620, y:600, t:"So the whole sky glows blue!", s:30, c:"green", cps:28, box:"underline", bc:"green", after:400 }
+  ]}
+]},
+
+/* ---------- How do vaccines work? ---------- */
+vaccine: { steps: [
+  { els:[
+    { k:"t", x:60, y:95, t:"How do vaccines work?", s:54, c:"dark", cps:26 },
+    { k:"s", d:"M 55 112 Q 190 104 330 110 T 560 106", c:"dark", w:3, dur:450 }
+  ]},
+  { els:[
+    { k:"t", x:60, y:185, t:"Goal: train your immune system", s:30, c:"dark", cps:30 },
+    { k:"t", x:60, y:227, t:"before the real fight.", s:30, c:"dark", cps:30 }
+  ]},
+  { els:[
+    { k:"s", shape:"circle", cx:820, cy:270, r:30, c:"red", w:2.6, fill:"pink", dur:500 },
+    { k:"s", d:"M850 270 L865 270 M841 291 L852 302 M820 300 L820 315 M799 291 L788 302 M790 270 L775 270 M799 249 L788 238 M820 240 L820 225 M841 249 L852 238", c:"red", w:2.4, dur:600 },
+    { k:"t", x:820, y:344, t:"the bad guy", s:20, c:"red", a:"middle", cps:40 }
+  ]},
+  { els:[
+    ...gnum(70, 298, 1),
+    { k:"t", x:100, y:305, t:"Vaccine shows a harmless piece", s:27, c:"dark", cps:30 },
+    { k:"t", x:100, y:345, t:"(the antigen)", s:22, c:"gray", cps:40 }
+  ]},
+  { els:[
+    ...gnum(70, 402, 2),
+    { k:"t", x:100, y:408, t:"Your body makes antibodies —", s:27, c:"dark", cps:30 },
+    { k:"t", x:100, y:448, t:"Y-shaped trackers", s:27, c:"dark", cps:32 },
+    { k:"s", d:"M 740 380 L 754 400 L 768 380 M 754 400 L 754 424", c:"blue", w:3, dur:450, after:120 },
+    { k:"s", d:"M 820 402 L 834 422 L 848 402 M 834 422 L 834 446", c:"blue", w:3, dur:450 }
+  ]},
+  { els:[
+    ...gnum(70, 506, 3),
+    { k:"t", x:100, y:512, t:"Memory cells remember.", s:27, c:"dark", cps:30 },
+    { k:"t", x:100, y:552, t:"Real infection → fast response!", s:25, c:"blue", cps:30 }
+  ]},
+  { els:[
+    { k:"t", x:620, y:556, t:"Your body practices on a dummy first —", s:23, c:"green", cps:30 },
+    { k:"t", x:620, y:590, t:"it never starts from zero.", s:23, c:"green", cps:30, box:"underline", bc:"green", after:400 }
+  ]}
+]},
+
+/* ---------- What is a derivative? ---------- */
+derivative: { steps: [
+  { els:[
+    { k:"t", x:60, y:95, t:"What is a derivative?", s:54, c:"dark", cps:26 },
+    { k:"s", d:"M 55 112 Q 170 104 300 110 T 520 106", c:"dark", w:3, dur:450 }
+  ]},
+  { els:[
+    { k:"t", x:60, y:185, t:"The slope of a curve", s:30, c:"dark", cps:32 },
+    { k:"t", x:60, y:227, t:"at a single point.", s:30, c:"dark", cps:32 }
+  ]},
+  { els:[
+    { k:"s", d:"M 210 200 L 210 490 L 540 490", c:"dark", w:2.6, dur:600 },
+    { k:"t", x:202, y:192, t:"y", s:18, c:"dark", cps:60 },
+    { k:"t", x:546, y:498, t:"x", s:18, c:"dark", cps:60 }
+  ]},
+  { els:[
+    { k:"s", d:"M 218 470 C 300 452 360 320 430 260 C 460 234 495 218 525 208", c:"blue", w:3, dur:1300 }
+  ]},
+  { els:[
+    { k:"s", shape:"circle", cx:330, cy:400, r:4, c:"red", w:2, dur:150, after:80 },
+    { k:"s", shape:"circle", cx:400, cy:300, r:5, c:"red", w:2, dur:150, after:120 },
+    { k:"s", x1:316, y1:420, x2:464, y2:182, shape:"line", c:"red", w:2.4, dash:true, dur:600 },
+    { k:"t", x:560, y:330, t:"average slope over a gap", s:20, c:"red", cps:34 }
+  ]},
+  { els:[
+    { k:"s", x1:330, y1:356, x2:470, y2:244, shape:"line", c:"dark", w:2.6, arrow:true, dur:600 },
+    { k:"t", x:560, y:392, t:"slope right here = derivative", s:22, c:"dark", cps:32 }
+  ]},
+  { els:[
+    { k:"t", x:560, y:470, t:"f′(x) = lim  Δf / Δx   (Δx → 0)", s:26, c:"dark", f:"p", cps:26, box:"underline", bc:"green", after:300 }
+  ]},
+  { els:[
+    { k:"t", x:560, y:545, t:"= instantaneous rate of change", s:24, c:"green", cps:30, after:400 }
+  ]}
+]}
+};
+</script>
+</body>
+</html>
