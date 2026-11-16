@@ -201,6 +201,12 @@ body{
     여러 모델이 낸 레슨을 합성해 돌려받습니다. 서버가 없으면 내장 데모 레슨만 재생됩니다.</p>
     <label>MOA 서버 주소</label>
     <input id="cApi" placeholder="http://127.0.0.1:8390">
+    <label>엔진</label>
+    <select id="cEngine">
+      <option value="auto">자동 (로컬=deepseek · 외부=MOA)</option>
+      <option value="deepseek">DeepSeek 단일 (가장 빠름)</option>
+      <option value="moa">MOA (여러 모델 합성)</option>
+    </select>
     <div id="apiState" style="margin-top:8px;font-size:13px;color:#6e685c"></div>
     <div id="cfgMsg"></div>
     <div class="row">
@@ -497,8 +503,15 @@ function apiBase(){
   return (saved || DEFAULT_API).replace(/\/+$/, "");
 }
 
+function enginePref(){
+  const qs = new URLSearchParams(location.search).get("engine");
+  if(qs) return qs;
+  try{ return (JSON.parse(localStorage.getItem("wbt-moa") || "{}").engine) || "auto"; }catch(e){ return "auto"; }
+}
 function engineFor(base){
-  // 로컬(127.0.0.1 / localhost)로 열면 deepseek 단일 엔진, 그 외(배포본)는 MOA
+  const pref = enginePref();
+  if(pref && pref !== "auto") return pref;
+  // 자동: 로컬(127.0.0.1 / localhost)로 열면 deepseek 단일 엔진, 그 외(배포본)는 MOA
   try{
     const h = new URL(base).hostname;
     if(h === "127.0.0.1" || h === "localhost" || h === "::1") return "deepseek";
@@ -546,6 +559,7 @@ async function generateLesson(q){
 const modal = document.getElementById("modal");
 function openModal(){
   document.getElementById("cApi").value = apiBase();
+  document.getElementById("cEngine").value = enginePref();
   document.getElementById("cfgMsg").textContent = "";
   const st = document.getElementById("apiState");
   st.textContent = "연결 확인 중…";
@@ -562,9 +576,10 @@ function openModal(){
 document.getElementById("cCancel").onclick = ()=>modal.classList.remove("open");
 document.getElementById("cSave").onclick = ()=>{
   const api = document.getElementById("cApi").value.trim();
-  try{ localStorage.setItem("wbt-moa", JSON.stringify({ api })); }catch(e){}
+  const engine = document.getElementById("cEngine").value || "auto";
+  try{ localStorage.setItem("wbt-moa", JSON.stringify({ api, engine })); }catch(e){}
   modal.classList.remove("open");
-  toast(api ? "MOA 서버 저장: " + api : "기본 서버 사용: " + DEFAULT_API);
+  toast("저장됨 · 엔진 " + engineFor(api || DEFAULT_API) + " · " + (api || DEFAULT_API));
 };
 
 /* ---------- landing wiring ---------- */

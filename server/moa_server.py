@@ -411,7 +411,18 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self) -> None:  # noqa: N802
-        if self.path.split("?")[0] in ("/health", "/"):
+        if self.path.split("?")[0] in ("/", "/index.html"):
+            page = os.path.join(ROOT, "index.html")
+            if os.path.exists(page):
+                body = open(page, "rb").read()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self._cors()
+                self.end_headers()
+                self.wfile.write(body)
+                return
+        if self.path.split("?")[0] == "/health":
             mp = main_provider()
             self._json(200, {
                 "ok": bool(available_providers()),
