@@ -103,6 +103,7 @@ def load_dotenv(path: str) -> None:
             if not line or line.startswith("#") or "=" not in line:
                 continue
             k, _, v = line.partition("=")
+            v = re.split(r"\s+#", v, maxsplit=1)[0]  # 인라인 주석 제거
             k, v = k.strip(), v.strip().strip('"').strip("'")
             if k and k not in os.environ:
                 os.environ[k] = v
@@ -272,12 +273,47 @@ def tidy(lesson: dict) -> dict:
     return lesson
 
 
-def make_lesson(question: str, lang: str | None) -> dict:
-    """MOA: 메인+서브 병렬 생성 → 메인 합성 → 검증(1회 재시도) → 캐시."""
+def single_lesson(provider: str, user: str, t0: float) -> dict:
+    """단일 공급자 모드 — deepseek 한 번(실패 시 1회 재시도)으로 레슨 생성.
+
+    로컬 접속(127.0.0.1)의 기본 엔진. MOA 합성 단계가 없어 2배 이상 빠르다.
+    """
+    cfg = PROVIDERS[provider]
+    lesson = None
+    attempts = 0
+    for temperature in (0.6, 0.45):
+        attempts += 1
+        lesson = parse_lesson(chat(provider, SCHEMA_RULES, user, temperature=temperature))
+        if lesson:
+            break
+    if lesson is None:
+        raise RuntimeError(f"{provider}({cfg['model']}) 응답을 레슨 JSON으로 변환하지 못했습니다")
+    lesson = tidy(lesson)
+    return {
+        "lesson": lesson,
+        "meta": {
+            "backend": "single",
+            "engine": provider,
+            "main": provider,
+            "subs": [],
+            "answered": [provider],
+            "failed": [],
+            "models": {provider: cfg["model"]},
+            "synthesized": False,
+            "attempts": attempts,
+            "ms": round((time.time() - t0) * 1000),
+            "cached": False,
+        },
+    }
+
+
+def make_lesson(question: str, lang: str | None, engine: str | None = None) -> dict:
+    """engine="moa" → 메인+서브 병렬 생성 → 메인 합성 / engine="deepseek" → 단일 호출."""
     t0 = time.time()
+    engine = (engine or os.environ.get("DEFAULT_ENGINE") or "deepseek").strip().lower()
     mp = main_provider()
     subs = sub_providers(mp)
-    cache_key = f"{mp}|{subs}|{lang}|{question.strip().lower()}"
+    cache_key = f"{engine}|{mp}|{subs}|{lang}|{question.strip().lower()}"
     with _cache_lock:
         hit = _cache.get(cache_key)
         if hit and hit[0] > time.time():
@@ -289,6 +325,13 @@ def make_lesson(question: str, lang: str | None) -> dict:
         (lang or "").lower()[:2], None
     )
     user = question if not lang_hint else f"{question}\n\n(Write every label in {lang_hint}.)"
+
+    if engine != "moa":
+        provider = engine if engine in PROVIDERS and os.environ.get(PROVIDERS[engine]["key"] or "") else mp
+        result = single_lesson(provider, user, t0)
+        with _cache_lock:
+            _cache[cache_key] = (time.time() + CACHE_TTL, {"lesson": result["lesson"], "meta": result["meta"]})
+        return result
 
     results: dict[str, str | None] = {}
 
@@ -373,6 +416,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {
                 "ok": bool(available_providers()),
                 "backend": "moa",
+                "default_engine": os.environ.get("DEFAULT_ENGINE", "deepseek"),
                 "main": mp,
                 "subs": list(sub_providers(mp)),
                 "providers": {
@@ -403,7 +447,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json(400, {"error": "question too long (max 500 chars)"})
             return
         try:
-            result = make_lesson(question, body.get("lang"))
+            result = make_lesson(question, body.get("lang"), body.get("engine"))
         except Exception as e:  # noqa: BLE001
             self._json(502, {"error": str(e)[:300]})
             return

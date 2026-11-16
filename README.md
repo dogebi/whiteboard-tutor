@@ -28,6 +28,16 @@ python3 server/moa_server.py  # 기본 http://127.0.0.1:8390
 그 다음 `index.html` 을 열고(로컬 파일 또는 Pages) 톱니(⚙)에서 서버 주소를 확인합니다.
 `?api=http://내서버:8390` 쿼리로도 지정할 수 있습니다.
 
+## 엔진 모드
+
+| 접속 경로 | 엔진 | 동작 |
+| --- | --- | --- |
+| 로컬 (`127.0.0.1` / `localhost`) | `deepseek` (기본) | deepseek-chat 한 번 호출로 레슨 생성 — 실측 **6.7초** |
+| 배포본 (`dogebi.github.io` 등 외부) | `moa` | 메인+서브 병렬 → 합성 — 실측 **46초** |
+
+프런트가 접속 호스트를 보고 엔진을 정합니다(`engineFor()`). 서버 기본값은 `.env` 의
+`DEFAULT_ENGINE` 이고, 요청 본문 `{"engine":"deepseek"|"moa"|"<provider>"}` 로 덮어쓸 수 있습니다.
+
 ## MOA 구성
 
 | 역할 | 공급자 | 모델 | weight |

@@ -460,7 +460,7 @@ async function teach(q){
   if(demo){ playLesson(demo); return; }
   // no demo → MOA 서버에 요청
   generating = true;
-  const note = drawNote("화이트보드에 그리는 중… (MOA: 여러 모델이 스케치 중)");
+  const note = drawNote(engineFor(apiBase()) === "moa" ? "화이트보드에 그리는 중… (MOA: 여러 모델이 스케치 중)" : "화이트보드에 그리는 중… (deepseek)");
   try{
     const lesson = await generateLesson(q);
     generating = false;
@@ -470,7 +470,7 @@ async function teach(q){
   }catch(err){
     generating = false;
     note.remove();
-    drawNote("MOA 오류: " + (err.message || err) + "\n⚙ 에서 서버 주소를 확인하거나 ↺ 로 다시 시도하세요.");
+    drawNote("생성 오류: " + (err.message || err) + "\n⚙ 에서 서버 주소를 확인하거나 ↺ 로 다시 시도하세요.");
   }
 }
 function drawNote(msg){
@@ -497,13 +497,25 @@ function apiBase(){
   return (saved || DEFAULT_API).replace(/\/+$/, "");
 }
 
+function engineFor(base){
+  // 로컬(127.0.0.1 / localhost)로 열면 deepseek 단일 엔진, 그 외(배포본)는 MOA
+  try{
+    const h = new URL(base).hostname;
+    if(h === "127.0.0.1" || h === "localhost" || h === "::1") return "deepseek";
+  }catch(e){}
+  return "moa";
+}
+
 function showBadge(meta){
   const el = document.getElementById("moaBadge");
   if(!meta || !meta.answered || !meta.answered.length){ el.hidden = true; return; }
   const names = meta.answered.map(p => (meta.models && meta.models[p] ? meta.models[p].split("/").pop() : p));
+  const secs = meta.ms ? " · " + (meta.ms / 1000).toFixed(1) + "s" : "";
   el.hidden = false;
-  el.textContent = (meta.synthesized ? "MOA 합성 · " : "MOA · ") + names.join(" + ") +
-    (meta.cached ? " · 캐시" : "") + (meta.failed && meta.failed.length ? " · 제외 " + meta.failed.length : "");
+  el.textContent = (meta.backend === "single" ? "엔진 " : (meta.synthesized ? "MOA 합성 · " : "MOA · ")) +
+    names.join(" + ") + secs +
+    (meta.cached ? " · 캐시" : "") +
+    (meta.backend !== "single" && meta.failed && meta.failed.length ? " · 제외 " + meta.failed.length : "");
 }
 
 async function generateLesson(q){
@@ -514,7 +526,7 @@ async function generateLesson(q){
     const r = await fetch(base + "/lesson", {
       method:"POST",
       headers:{ "content-type":"application/json" },
-      body:JSON.stringify({ question:q, lang:"ko" }),
+      body:JSON.stringify({ question:q, lang:"ko", engine:engineFor(base) }),
       signal:ctlAbort.signal
     });
     const j = await r.json().catch(()=>({}));
@@ -541,7 +553,7 @@ function openModal(){
     .then(r => r.json())
     .then(j => {
       const ok = Object.entries(j.providers || {}).filter(([, v]) => v.key).map(([k]) => k);
-      st.textContent = "연결됨 · 메인 " + j.main + " · 키 있음: " + (ok.join(", ") || "없음");
+      st.textContent = "연결됨 · 엔진 " + engineFor(apiBase()) + " · 메인 " + j.main + " · 키 있음: " + (ok.join(", ") || "없음");
       st.style.color = "#217a3c";
     })
     .catch(()=>{ st.textContent = "서버에 연결할 수 없습니다 (python3 server/moa_server.py 실행 필요)"; st.style.color = "#a25"; });
