@@ -75,22 +75,42 @@ CACHE_TTL = float(os.environ.get("MOA_CACHE_TTL", "300"))
 _cache: dict[str, tuple[float, dict]] = {}
 _cache_lock = threading.Lock()
 
-SCHEMA_RULES = """You are a whiteboard tutor that explains topics with hand-drawn animations.
-Return ONLY a JSON object (no markdown fences) shaped like:
-{"steps":[{"els":[
-  {"k":"t","x":0,"y":0,"t":"text","s":30,"c":"dark","f":"g"},
-  {"k":"s","d":"M 100 100 L 300 120","c":"blue","w":2.6,"arrow":true,"fill":"pink","dash":false}
-]}]}
+SCHEMA_RULES = """You are a whiteboard tutor. The page shows TWO panes:
+LEFT = your explanation as short text lines, RIGHT = one interactive visual per step.
+Return ONLY a JSON object (no markdown fences):
+
+{"topic":"계절은 왜 생길까?","steps":[
+  {"title":"먼저 흔한 오해",
+   "text":["여름은 지구가 태양에 가까워서 생긴다고 생각하기 쉽습니다.","!1월 3일]이 가장 가까운데 그때가 겨울입니다."],
+   "viz":{"type":"diagram","els":[{"k":"t","x":80,"y":120,"t":"23.5°","s":44,"c":"red"},
+          {"k":"s","shape":"circle","cx":600,"cy":320,"r":90,"c":"blue","w":3}]}},
+  {"title":"기온 비교","text":["위도별 여름 기온을 보면 거리와 무관합니다."],
+   "viz":{"type":"chart","kind":"bar","unit":"°C","labels":["서울","싱가포르","시드니"],
+          "series":[{"name":"여름","values":[28,31,23]},{"name":"겨울","values":[-2,27,13]}],
+          "caption":"서울: 여름 28 / 겨울 -2"}},
+  {"title":"행성 비교","text":["공전 주기가 길수록 1년이 깁니다."],
+   "viz":{"type":"table","columns":["행성","공전주기(일)","거리(AU)"],
+          "rows":[["수성",88,0.39],["지구",365,1.0],["화성",687,1.52]],"caption":"태양계 기본값"}}
+]}
+
+Allowed viz types (pick the one that fits the step, and VARY them):
+1. {"type":"chart","kind":"bar|line","unit":"°C","labels":["a","b"],"series":[{"name":"계열","values":[1,2]}],"caption":"..."}
+2. {"type":"table","columns":["이름","값"],"rows":[["a",1],["b",2]],"caption":"..."}
+3. {"type":"plot","curves":[{"name":"f(x)","points":[[0,0],[1,1],[2,4]]}],"xLabel":"x","yLabel":"y","caption":"..."}
+4. {"type":"diagram","els":[...]}   ← 손그림. 좌표계 1200x640.
+   els: {"k":"t","x":60,"y":95,"t":"text","s":30,"c":"dark|red|blue|green|gray","f":"g","a":"middle|end"}
+        {"k":"s","d":"M 100 100 L 300 120","c":"blue","w":2.6,"arrow":true,"fill":"pink|blue|green","dash":false}
+        또는 {"k":"s","shape":"circle|ellipse|line","cx":600,"cy":300,"r":80}
 
 Rules:
-- Canvas is 1200 wide x 640 tall; keep everything inside (x:40-1160, y:50-620).
-- "c" is one of: dark, red, blue, green, gray. "f": "g" = handwriting, "p" = plain hand.
-- Step 1 is a big title (s 48-56) at y ~95 plus an underline stroke.
-- Then 4-9 more steps teaching step by step, in the SAME LANGUAGE as the user's question.
-- Keep each text under ~60 chars; use multiple text lines instead of long sentences.
-- Use "s" strokes for simple diagrams (arrows, circles via path arcs, axes, waves).
-- Text colors: key terms can be red/blue/green; conclusions green.
-- Educational, warm, concise. Final step: a short green takeaway."""
+- 6-8 steps. Step 1 introduces the question; the last step is a short conclusion.
+- Use at least TWO different viz types across the lesson (diagram, chart, table, plot). Use chart or table whenever the topic has numbers.
+- text: 1-3 lines, each under 70 chars. Plain declaration, no markdown.
+  Prefix a line with "!" for a red key line, "+" for a green conclusion line.
+- Write everything in the SAME LANGUAGE as the user's question.
+- title: under 26 chars, no numbering.
+- Every number you put in a chart/table must be realistic; if unsure, use approximate values and say so in caption.
+- Keep diagram elements inside x:40-1160, y:50-620 and avoid overlapping text (leave at least 40px between lines)."""
 
 
 # ---------------------------------------------------------------- .env
@@ -226,19 +246,56 @@ def parse_lesson(text: str | None) -> dict | None:
 
 
 def validate(obj) -> bool:
+    """v2(title/text/viz) 또는 레거시(els) 레슨인지 검사."""
     if not isinstance(obj, dict) or not isinstance(obj.get("steps"), list) or not obj["steps"]:
         return False
     for step in obj["steps"]:
-        if not isinstance(step, dict) or not isinstance(step.get("els"), list):
+        if not isinstance(step, dict):
             return False
-        for el in step["els"]:
-            if not isinstance(el, dict) or el.get("k") not in ("t", "s"):
+        if isinstance(step.get("els"), list):        # 레거시
+            if not step["els"]:
                 return False
-            if el["k"] == "t" and not isinstance(el.get("t"), str):
+            continue
+        viz = step.get("viz")
+        if not isinstance(viz, dict):
+            return False
+        t = viz.get("type")
+        if t == "chart":
+            if not isinstance(viz.get("labels"), list) or not isinstance(viz.get("series"), list):
                 return False
-            if el["k"] == "s" and el.get("shape") not in ("ellipse", "circle", "line") and not el.get("d"):
+            if not all(isinstance(se.get("values"), list) for se in viz["series"]):
                 return False
+        elif t == "table":
+            if not isinstance(viz.get("columns"), list) or not isinstance(viz.get("rows"), list):
+                return False
+        elif t == "plot":
+            curves = viz.get("curves")
+            if not isinstance(curves, list) or not curves:
+                return False
+            if not all(isinstance(c.get("points"), list) and len(c["points"]) >= 2 for c in curves):
+                return False
+        elif t == "diagram":
+            if not isinstance(viz.get("els"), list) or not viz["els"]:
+                return False
+        elif t == "image":
+            if not viz.get("src"):
+                return False
+        else:
+            return False
+        if step.get("text") is not None and not isinstance(step.get("text"), list):
+            return False
     return True
+
+
+def normalize_steps(lesson: dict) -> dict:
+    """레거시 {els} 스텝에 title/text 를 채워 넣는다 (프런트도 같은 변환을 하지만 서버가 먼저 정규화)."""
+    for step in lesson.get("steps", []):
+        if isinstance(step.get("els"), list) and "viz" not in step:
+            texts = [e.get("t", "") for e in step["els"] if e.get("k") == "t"]
+            step["title"] = step.get("title") or (texts[0] if texts else "")
+            step["text"] = step.get("text") or texts[1:4]
+            step["viz"] = {"type": "diagram", "els": step.pop("els")}
+    return lesson
 
 
 def _truncate(s: str, n: int = 6000) -> str:
@@ -251,9 +308,12 @@ def tidy(lesson: dict) -> dict:
     좌표를 새로 디자인하지 않고, 같은 step 안에서 y가 8px 이내로 겹치는 텍스트만
     아래로 내려 캔버스(640) 안에 유지한다. 폰트 크기가 다르면 큰 쪽을 기준으로 간격을 잡는다.
     """
+    normalize_steps(lesson)
     for step in lesson.get("steps", []):
+        if (step.get("viz") or {}).get("type") != "diagram":
+            continue
         placed: list[tuple[float, float, float]] = []  # (x, y, size)
-        for el in step.get("els", []):
+        for el in (step.get("viz") or {}).get("els", []):
             if el.get("k") != "t":
                 continue
             x = float(el.get("x") or 0)
