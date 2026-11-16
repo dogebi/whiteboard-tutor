@@ -30,7 +30,7 @@ body{
 }
 /* ---------- 왼쪽: 텍스트 ---------- */
 #left{
-  padding:24px 24px 72px; overflow-y:auto; border-right:1px solid var(--line);
+  padding:24px 24px 104px; overflow-y:auto; border-right:1px solid var(--line);
   background:linear-gradient(180deg,rgba(255,255,255,.55),rgba(250,249,245,0) 40%);
 }
 #brand{ display:flex; align-items:baseline; gap:8px; margin-bottom:12px; }
@@ -52,8 +52,9 @@ body{
 .card p{ margin:2px 0; font-size:15.5px; line-height:1.42; color:#443f37; min-height:1px; }
 .card p.k{ color:var(--red); }
 .card p.g{ color:var(--accent); }
-#newQ{ position:absolute; left:22px; bottom:16px; font-size:13px; color:var(--ink3);
-  cursor:pointer; border-bottom:1px dotted var(--ink3); }
+#newQ{ position:absolute; left:0; bottom:0; padding:10px 22px 14px; font-size:13px; color:var(--ink3);
+  cursor:pointer; background:#f7f5ef; border-top:1px solid var(--line);
+  width:100%; text-decoration:underline dotted var(--ink3); text-underline-offset:3px; }
 #newQ:hover{ color:var(--ink); }
 /* ---------- 오른쪽: 인터랙티브 ---------- */
 #right{ position:relative; display:flex; flex-direction:column; background:var(--paper); }
@@ -251,13 +252,71 @@ function engineFor(base){
   }catch(e){}
   return "moa";
 }
+
+/* ---------- 질문 언어 감지 (한국어 질문 → 한국어, 中文问题 → 中文) ---------- */
+function detectLang(t){
+  const s=String(t||"");
+  if(/[\uac00-\ud7a3\u1100-\u11ff]/.test(s)) return "ko";
+  if(/[\u3040-\u30ff]/.test(s)) return "ja";
+  if(/[\u4e00-\u9fff]/.test(s)) return "zh";
+  if(/[A-Za-z]/.test(s)) return "en";
+  return "ko";
+}
+const I18N={
+  ko:{stepCount:n=>n+"단계 · 왼쪽 설명을 읽고 오른쪽 자료를 만져 보세요",
+      cached:" · 캐시",
+      badge:"엔진 ",
+      brand:"왼쪽 설명 · 오른쪽 인터랙티브", newQ:"＋ 새 질문", empty:"무엇이 궁금하세요?", ph:"ask anything…",
+      done:"완료 · 단계를 눌러 되돌아보기", drawing:"그리는 중…", err:"오류: ",
+      label:{diagram:"손그림 다이어그램",chart:"차트",table:"표",plot:"그래프",image:"이미지"},
+      hint:{diagram:"글자 위에 마우스를 올리면 값이 뜹니다",
+            chart:"막대·점에 마우스를 올려 값 보기 · 오른쪽 범례를 누르면 계열 켜고 끄기",
+            table:"열 제목 클릭 → 정렬 · 행 클릭 → 선택",
+            plot:"마우스로 값 읽기 · 휠 → 확대/축소 · 드래그 → 이동",
+            image:"휠 → 확대/축소 · 드래그 → 이동"}},
+  zh:{stepCount:n=>n+" 步 · 左侧阅读说明，右侧可交互图表",
+      cached:" · 缓存",
+      badge:"引擎 ",
+      brand:"左：文字说明 · 右：可交互图表", newQ:"＋ 新问题", empty:"你想了解什么？", ph:"输入你的问题…",
+      done:"完成 · 点击任一步骤回看", drawing:"正在绘制…", err:"错误：",
+      label:{diagram:"手绘示意图",chart:"图表",table:"表格",plot:"曲线图",image:"图片"},
+      hint:{diagram:"把鼠标放在文字上可查看数值",
+            chart:"悬停柱状图查看数值 · 点击右侧图例可显示/隐藏系列",
+            table:"点击列标题排序 · 点击行可选中",
+            plot:"移动鼠标读数 · 滚轮缩放 · 拖拽平移",
+            image:"滚轮缩放 · 拖拽平移"}},
+  en:{stepCount:n=>n+" steps · read on the left, play with the visuals on the right",
+      cached:" · cached",
+      badge:"engine ",
+      brand:"text left · interactive right", newQ:"＋ New question", empty:"What are you curious about?", ph:"ask anything…",
+      done:"Done · click a step to review", drawing:"Drawing…", err:"Error: ",
+      label:{diagram:"Hand-drawn diagram",chart:"Chart",table:"Table",plot:"Plot",image:"Image"},
+      hint:{diagram:"Hover any label to see its value",
+            chart:"Hover bars for values · click a legend item to toggle a series",
+            table:"Click a column header to sort · click a row to select",
+            plot:"Move to read values · wheel to zoom · drag to pan",
+            image:"Wheel to zoom · drag to pan"}},
+  ja:{stepCount:n=>n+"ステップ · 左の説明を読み、右の図を操作してください",
+      cached:" · キャッシュ",
+      badge:"エンジン ",
+      brand:"左に説明 · 右にインタラクティブ", newQ:"＋ 新しい質問", empty:"何を知りたいですか？", ph:"質問を入力…",
+      done:"完了 · ステップをクリックして見返す", drawing:"描いています…", err:"エラー: ",
+      label:{diagram:"手描き図",chart:"グラフ",table:"表",plot:"曲線",image:"画像"},
+      hint:{diagram:"文字にマウスを乗せると値が出ます",
+            chart:"棒にマウスで値表示 · 凡例クリックで系列の表示切替",
+            table:"列見出しクリックで並べ替え · 行クリックで選択",
+            plot:"マウスで値読み · ホイールで拡大縮小 · ドラッグで移動",
+            image:"ホイールで拡大縮小 · ドラッグで移動"}}
+};
+let UI=I18N.ko;
+
 function setBadge(meta){
   const el=$("badge");
   if(!meta||!meta.answered||!meta.answered.length){ el.hidden=true; return; }
   const names=meta.answered.map(p=>meta.models&&meta.models[p]?meta.models[p].split("/").pop():p);
   el.hidden=false;
-  el.textContent=(meta.backend==="single"?"엔진 ":"MOA ")+names.join(" + ")+
-    (meta.ms?" · "+(meta.ms/1000).toFixed(1)+"s":"")+(meta.cached?" · 캐시":"");
+  el.textContent=(UI.badge||(meta.backend==="single"?"엔진 ":"MOA "))+names.join(" + ")+
+    (meta.ms?" · "+(meta.ms/1000).toFixed(1)+"s":"")+(meta.cached?(UI.cached||" · 캐시"):"");
 }
 async function fetchLesson(q){
   const base=apiBase();
@@ -265,7 +324,7 @@ async function fetchLesson(q){
   const t=setTimeout(()=>ac.abort(),180000);
   try{
     const r=await fetch(base+"/lesson",{method:"POST",headers:{"content-type":"application/json"},
-      body:JSON.stringify({question:q,lang:"ko",engine:engineFor(base)}),signal:ac.signal});
+      body:JSON.stringify({question:q,lang:detectLang(q),engine:engineFor(base)}),signal:ac.signal});
     const j=await r.json().catch(()=>({}));
     if(!r.ok) throw new Error(j.error||("HTTP "+r.status));
     if(!j.lesson||!j.lesson.steps) throw new Error("레슨 형식이 아닙니다");
@@ -599,7 +658,7 @@ function renderPlot(viz,host){
       path.style.transition="stroke-dashoffset .8s ease";
       requestAnimationFrame(()=>{ path.style.strokeDashoffset=0; });
       if(c.name){
-        const t=mk("text",{x:padL+14,y:padT+22+ci*22,"font-size":17,fill:color,
+        const t=mk("text",{x:padL+20,y:padT+20+ci*22,"font-size":16,fill:color,
           "font-family":"'Patrick Hand',cursive"},g); t.textContent=c.name;
       }
     });
@@ -608,8 +667,10 @@ function renderPlot(viz,host){
         "font-family":"'Patrick Hand',cursive"},grid); t.textContent=viz.xLabel;
     }
     if(viz.yLabel){
-      const t=mk("text",{x:padL-58,y:padT+4,"font-size":16,fill:"#6e685c",
-        "font-family":"'Patrick Hand',cursive"},grid); t.textContent=viz.yLabel;
+      const t=mk("text",{x:0,y:0,"font-size":15,fill:"#6e685c","text-anchor":"middle",
+        "font-family":"'Patrick Hand',cursive",
+        transform:"translate(16,"+(padT+plotH/2)+") rotate(-90)"},grid);
+      t.textContent=viz.yLabel;
     }
   }
   draw();
@@ -764,8 +825,8 @@ async function renderStep(i,id){
   let card=$("steps").querySelector('.card[data-i="'+i+'"]')||addCard(step,i);
   $("vizTitle").textContent=step.title||"";
   const type=(step.viz&&step.viz.type)||"diagram";
-  $("vizTag").textContent=VIZ_LABEL[type]||"시각 자료";
-  $("hint").textContent=VIZ_HINT[type]||"";
+  $("vizTag").textContent=(UI.label&&UI.label[type])||VIZ_LABEL[type]||"시각 자료";
+  $("hint").textContent=(UI.hint&&UI.hint[type])||VIZ_HINT[type]||"";
   $("cap").textContent=(step.viz&&step.viz.caption)||"";
   $("viz").innerHTML="";
   const host=document.createElement("div");
@@ -789,14 +850,14 @@ async function play(){
   lesson.steps.forEach((s,i)=>addCard(s,i));
   [...$("steps").children].forEach(c=>c.classList.add("dim"));
   $("q").textContent=lesson.topic||lastQuery;
-  $("qsub").textContent=lesson.steps.length+"단계 · 왼쪽 설명을 읽고 오른쪽 자료를 만져 보세요";
+  $("qsub").textContent=UI.stepCount(lesson.steps.length);
   for(let i=0;i<lesson.steps.length;i++){
     if(id!==runId) return;
     await renderStep(i,id);
     skipFlag=false;
     if(i<lesson.steps.length-1) await wait(850,id);
   }
-  if(id===runId) $("vizTag").textContent="완료 · 단계를 눌러 되돌아보기";
+  if(id===runId) $("vizTag").textContent=UI.done;
 }
 function jump(i){
   if(!lesson) return;
@@ -815,7 +876,7 @@ $("bCfg").onclick=openModal;
 $("newQ").onclick=()=>{
   runId++; clearStage(); lesson=null;
   $("landing").style.display="flex";
-  $("q").textContent="무엇이 궁금하세요?"; $("qsub").textContent="";
+  $("q").textContent=UI.empty||"무엇이 궁금하세요?"; $("qsub").textContent="";
   $("progress").firstElementChild.style.width="0%";
   $("qi").focus();
 };
@@ -832,9 +893,12 @@ function stageNote(msg){
 async function teach(q){
   if(!q||!q.trim()||generating) return;
   lastQuery=q.trim();
+  UI=I18N[detectLang(lastQuery)]||I18N.ko;   // 질문 언어를 UI 문구에도 적용
+  $("brand").lastElementChild.textContent=UI.brand;
+  $("newQ").textContent=UI.newQ;
   $("landing").style.display="none";
   generating=true;
-  const note=stageNote("그리는 중…");
+  const note=stageNote(UI.drawing);
   try{
     const raw=await fetchLesson(lastQuery);
     lesson=normalize(raw);
@@ -843,7 +907,7 @@ async function teach(q){
     play();
   }catch(e){
     generating=false; note.remove();
-    stageNote("오류: "+(e.message||e));
+    stageNote(UI.err+(e.message||e));
   }
 }
 $("go").onclick=()=>{ const v=$("qi").value; $("qi").value=""; teach(v); };
@@ -851,7 +915,7 @@ $("qi").addEventListener("keydown",e=>{
   if(e.key==="Enter"){ const v=$("qi").value; $("qi").value=""; teach(v); }
 });
 document.querySelectorAll(".tries a").forEach(a=>a.addEventListener("click",()=>teach(a.dataset.q)));
-$("qi").focus();
+$("qi").placeholder=UI.ph; $("qi").focus();
 
 /* ================= 설정 ================= */
 const modal=$("modal");
@@ -1058,10 +1122,11 @@ function demoLesson(name){
 }
 const _teach=teach;
 window.teach=function(q){
-  const name=pickDemo(q);
+  const name=detectLang(q)==="ko"?pickDemo(q):null;
   if(name){
     generating=false;
     lastQuery=(q||"").trim();
+    UI=I18N[detectLang(lastQuery)]||I18N.ko;
     $("landing").style.display="none";
     lesson=demoLesson(name);
     play();

@@ -107,7 +107,7 @@ Rules:
 - Use at least TWO different viz types across the lesson (diagram, chart, table, plot). Use chart or table whenever the topic has numbers.
 - text: 1-3 lines, each under 70 chars. Plain declaration, no markdown.
   Prefix a line with "!" for a red key line, "+" for a green conclusion line.
-- Write everything in the SAME LANGUAGE as the user's question.
+- LANGUAGE: write every title, text line, chart label, table cell and caption in the SAME language as the question (중국어 질문 → 简体中文, 한국어 → 한국어, English → English). Never mix languages.
 - title: under 26 chars, no numbering.
 - Every number you put in a chart/table must be realistic; if unsure, use approximate values and say so in caption.
 - Keep diagram elements inside x:40-1160, y:50-620 and avoid overlapping text (leave at least 40px between lines)."""
@@ -333,6 +333,25 @@ def tidy(lesson: dict) -> dict:
     return lesson
 
 
+LANG_NAMES = {"ko": "Korean", "zh": "Simplified Chinese", "ja": "Japanese", "en": "English"}
+
+
+def detect_lang(text: str) -> str:
+    """질문 문장으로 언어를 판정한다. 요청의 lang 파라미터보다 우선한다.
+
+    한글 → ko, 가나 → ja, 한자 → zh, 그 외 라틴 → en.
+    """
+    if re.search(r"[\uac00-\ud7a3\u1100-\u11ff]", text):
+        return "ko"
+    if re.search(r"[\u3040-\u30ff]", text):
+        return "ja"
+    if re.search(r"[\u4e00-\u9fff]", text):
+        return "zh"
+    if re.search(r"[A-Za-z]", text):
+        return "en"
+    return "ko"
+
+
 def single_lesson(provider: str, user: str, t0: float) -> dict:
     """단일 공급자 모드 — deepseek 한 번(실패 시 1회 재시도)으로 레슨 생성.
 
@@ -373,7 +392,7 @@ def make_lesson(question: str, lang: str | None, engine: str | None = None) -> d
     engine = (engine or os.environ.get("DEFAULT_ENGINE") or "deepseek").strip().lower()
     mp = main_provider()
     subs = sub_providers(mp)
-    cache_key = f"{engine}|{mp}|{subs}|{lang}|{question.strip().lower()}"
+    cache_key = f"{engine}|{mp}|{subs}|{detect_lang(question)}|{question.strip().lower()}"
     with _cache_lock:
         hit = _cache.get(cache_key)
         if hit and hit[0] > time.time():
@@ -381,10 +400,14 @@ def make_lesson(question: str, lang: str | None, engine: str | None = None) -> d
             meta = dict(hit[1]["meta"], cached=True, ms=round((time.time() - t0) * 1000))
             return {"lesson": lesson, "meta": meta}
 
-    lang_hint = {"ko": "Korean", "en": "English", "ja": "Japanese", "zh": "Chinese"}.get(
-        (lang or "").lower()[:2], None
+    # 질문 문장의 언어를 우선한다 (한국어 질문 → 한국어, 中文问题 → 中文)
+    target = detect_lang(question)
+    lang_hint = LANG_NAMES.get(target)
+    user = question + (
+        f"\n\n(Write EVERYTHING — titles, text lines, chart labels, table cells, captions, "
+        f"axis names — in {lang_hint}. Do not use any other language.)"
+        if lang_hint else ""
     )
-    user = question if not lang_hint else f"{question}\n\n(Write every label in {lang_hint}.)"
 
     if engine != "moa":
         provider = engine if engine in PROVIDERS and os.environ.get(PROVIDERS[engine]["key"] or "") else mp
