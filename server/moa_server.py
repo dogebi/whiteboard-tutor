@@ -244,6 +244,34 @@ def _truncate(s: str, n: int = 6000) -> str:
     return s if len(s) <= n else s[: n - 600] + "\n…\n" + s[-600:]
 
 
+def tidy(lesson: dict) -> dict:
+    """LLM이 겹쳐 놓은 텍스트를 최소한으로 흩어 놓는다 (같은 줄에 두 글자가 겹치는 문제).
+
+    좌표를 새로 디자인하지 않고, 같은 step 안에서 y가 8px 이내로 겹치는 텍스트만
+    아래로 내려 캔버스(640) 안에 유지한다. 폰트 크기가 다르면 큰 쪽을 기준으로 간격을 잡는다.
+    """
+    for step in lesson.get("steps", []):
+        placed: list[tuple[float, float, float]] = []  # (x, y, size)
+        for el in step.get("els", []):
+            if el.get("k") != "t":
+                continue
+            x = float(el.get("x") or 0)
+            y = float(el.get("y") or 0)
+            size = float(el.get("s") or 26)
+            for px, py, ps in placed:
+                same_line = abs(y - py) < 8
+                overlap_x = abs(x - px) < max(120, (size + ps) * 3)
+                if same_line and overlap_x:
+                    y = py + max(size, ps) * 1.05
+                    break
+            if y > 610:
+                y = 610
+            el["y"] = round(y, 1)
+            el["x"] = round(x, 1)
+            placed.append((x, y, size))
+    return lesson
+
+
 def make_lesson(question: str, lang: str | None) -> dict:
     """MOA: 메인+서브 병렬 생성 → 메인 합성 → 검증(1회 재시도) → 캐시."""
     t0 = time.time()
@@ -304,6 +332,7 @@ def make_lesson(question: str, lang: str | None) -> dict:
         if lesson is None:  # 합성 실패 → 최고 weight 답변 사용
             lesson = valid[pool[0]]
 
+    lesson = tidy(lesson)
     meta["ms"] = round((time.time() - t0) * 1000)
     meta["cached"] = False
     with _cache_lock:
